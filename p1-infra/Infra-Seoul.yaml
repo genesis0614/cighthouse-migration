@@ -121,36 +121,36 @@ Resources:
       RouteTableId: !Ref SeoulPriRouteTable
       SubnetId: !Ref SeoulPriSubnet4
 
-  # 키 이름
+  # 키 페어
   KeyPair:
     Type: AWS::EC2::KeyPair
     Properties:
-      KeyName: <key name>
-      PublicKeyMaterial: <put ur key in here. ex.ssh-rsa AAAA...>
+      KeyName: "put-your-key-name-here"       # 배포 시 실제 키 이름으로 변경 필수
+      PublicKeyMaterial: "ssh-rsa AAAA..."    # 배포 시 실제 공개키로 변경 필수 (로컬에 생성된 공개키 또는 PuTTYgen OpenSSH 형식)
 
   # NAT Instance
   SeoulNATInstance:
     Type: "AWS::EC2::Instance"
     Properties:
       InstanceType: "t2.micro"
-      KeyName: "seoul-key"
-      ImageId: "ami-08fe4e7862fb0d4c2"  # Amazon Linux 2 AMI
+      KeyName: "put-your-key-name-here"       # 배포 시 실제 키 이름으로 변경 필수
+      ImageId: "ami-08fe4e7862fb0d4c2"        # Amazon Linux 2 AMI
       SourceDestCheck: false
       Tags:
         - Key: "Name"
           Value: "seoul-nat-instance"
       NetworkInterfaces: 
-          - AssociatePublicIpAddress: true
-            DeviceIndex: 0
-            GroupSet: 
-              - !Ref SeoulNATSG
-            SubnetId: !Ref SeoulPubSubnet1
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet: 
+            - !Ref SeoulNATSG
+          SubnetId: !Ref SeoulPubSubnet1
+      # 접속시, KeyPair에 명시된 Key를 통해 접속
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          echo "P@ssw0rd" | passwd --stdin root
-          sed -i "s/^#PermitRootLogin yes/PermitRootLogin yes/g" /etc/ssh/sshd_config
-          sed -i "s/^PasswordAuthentication no/PasswordAuthentication yes/g" /etc/ssh/sshd_config
+          sed -i "s/^#PermitRootLogin no/PermitRootLogin prohibit-password/g" /etc/ssh/sshd_config
+          sed -i "s/^PasswordAuthentication yes/PasswordAuthentication no/g" /etc/ssh/sshd_config
           systemctl restart sshd
           echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
           sysctl -p /etc/sysctl.conf
@@ -169,16 +169,16 @@ Resources:
       LaunchTemplateName: "seoul-web-launch"
       LaunchTemplateData:
         InstanceType: "t2.micro"
-        KeyName: "seoul-key"
-        ImageId: "ami-08fe4e7862fb0d4c2"  # Amazon Linux 2 AMI
+        KeyName: "put-your-key-name-here"       # 배포 시 실제 키 이름으로 변경 필수
+        ImageId: "ami-08fe4e7862fb0d4c2"        # Amazon Linux 2 AMI
         SecurityGroupIds:
           - !Ref SeoulWebSG
+        # 접속시, KeyPair에 명시된 Key를 통해 접속
         UserData:
           Fn::Base64: !Sub |
             #!/bin/bash
-            echo "P@ssw0rd" | passwd --stdin root
-            sed -i "s/^#PermitRootLogin yes/PermitRootLogin yes/g" /etc/ssh/sshd_config
-            sed -i "s/^PasswordAuthentication no/PasswordAuthentication yes/g" /etc/ssh/sshd_config
+            sed -i "s/^#PermitRootLogin no/PermitRootLogin prohibit-password/g" /etc/ssh/sshd_config
+            sed -i "s/^PasswordAuthentication yes/PasswordAuthentication no/g" /etc/ssh/sshd_config
             systemctl restart sshd
             yum install -y httpd
             systemctl start httpd
@@ -284,10 +284,10 @@ Resources:
       GroupDescription: "NAT Instance Security Group"
       VpcId: !Ref SeoulVPC
       SecurityGroupIngress:
-        - IpProtocol: "-1"  # 모든 프로토콜 허용
-          FromPort: 0
-          ToPort: 65535
-          CidrIp: 0.0.0.0/0  # 모든 IP에서 허용
+        - IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+          CidrIp: "0.0.0.0/0"  # 모든 외부 IP 허용 (Bastion Host 역할)
       Tags:
         - Key: "Name"
           Value: "seoul-nat-sg"

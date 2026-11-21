@@ -220,12 +220,12 @@ Resources:
       RouteTableId: !Ref RdsRt56
       SubnetId: !Ref RdsSub6
 
-  # Keypair
+  # 키 페어
   KeyPair:
     Type: AWS::EC2::KeyPair
     Properties:
-      KeyName: <key name>
-      PublicKeyMaterial: <put ur key in here. ex.ssh-rsa AAAA...>
+      KeyName: "put-your-key-name-here"       # 배포 시 실제 키 이름으로 변경 필수
+      PublicKeyMaterial: "ssh-rsa AAAA..."    # 배포 시 실제 공개키로 변경 필수 (로컬에 생성된 공개키 또는 PuTTYgen OpenSSH 형식)
 
   # RDS 보안그룹
   RdsSG:
