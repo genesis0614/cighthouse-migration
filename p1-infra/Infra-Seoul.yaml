@@ -149,8 +149,9 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          sed -i "s/^#PermitRootLogin no/PermitRootLogin prohibit-password/g" /etc/ssh/sshd_config
-          sed -i "s/^PasswordAuthentication yes/PasswordAuthentication no/g" /etc/ssh/sshd_config
+          sed -i "s/^#PermitRootLogin .*/PermitRootLogin no/g" /etc/ssh/sshd_config
+          sed -i "s/^PermitRootLogin .*/PermitRootLogin no/g" /etc/ssh/sshd_config
+          sed -i "s/^PasswordAuthentication .*/PasswordAuthentication no/g" /etc/ssh/sshd_config
           systemctl restart sshd
           echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
           sysctl -p /etc/sysctl.conf
@@ -159,7 +160,6 @@ Resources:
           systemctl enable iptables
           iptables -F
           iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-          iptables -F -t filter
 
 
   # Launch Template
@@ -177,8 +177,9 @@ Resources:
         UserData:
           Fn::Base64: !Sub |
             #!/bin/bash
-            sed -i "s/^#PermitRootLogin no/PermitRootLogin prohibit-password/g" /etc/ssh/sshd_config
-            sed -i "s/^PasswordAuthentication yes/PasswordAuthentication no/g" /etc/ssh/sshd_config
+            sed -i "s/^#PermitRootLogin .*/PermitRootLogin no/g" /etc/ssh/sshd_config
+            sed -i "s/^PermitRootLogin .*/PermitRootLogin no/g" /etc/ssh/sshd_config
+            sed -i "s/^PasswordAuthentication .*/PasswordAuthentication no/g" /etc/ssh/sshd_config
             systemctl restart sshd
             yum install -y httpd
             systemctl start httpd
@@ -208,8 +209,6 @@ Resources:
       Protocol: "HTTP"
       Port: 80
       TargetType: instance
-      Targets:
-        - Id: !Ref SeoulNATInstance
       Tags:
         - Key: "Name"
           Value: "seoul-web-tg"
@@ -244,8 +243,8 @@ Resources:
     Type: "AWS::AutoScaling::AutoScalingGroup"
     Properties:
       LaunchTemplate:
-        LaunchTemplateName: "seoul-web-launch"
-        Version: "1"
+        LaunchTemplateName: !Ref SeoulWebLaunchTemplate
+        Version: !GetAtt SeoulWebLaunchTemplate.LatestVersionNumber
       VPCZoneIdentifier:
         - !Ref SeoulPriSubnet3
         - !Ref SeoulPriSubnet4
@@ -284,10 +283,10 @@ Resources:
       GroupDescription: "NAT Instance Security Group"
       VpcId: !Ref SeoulVPC
       SecurityGroupIngress:
-        - IpProtocol: "tcp"
-          FromPort: 22
-          ToPort: 22
-          CidrIp: "0.0.0.0/0"  # 모든 외부 IP 허용 (Bastion Host 역할)
+        - IpProtocol: "-1"  # 모든 프로토콜 허용
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0  # 모든 IP에서 허용
       Tags:
         - Key: "Name"
           Value: "seoul-nat-sg"
