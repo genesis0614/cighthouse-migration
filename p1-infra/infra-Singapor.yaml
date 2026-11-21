@@ -224,8 +224,8 @@ Resources:
   KeyPair:
     Type: AWS::EC2::KeyPair
     Properties:
-      KeyName: singapore-key
-      PublicKeyMaterial: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCXIoMb/gnFQmBBPfR+YnZ7RgNEpUbpSYFW0i0pE4yV+1k4ArXO4l9brzOLwJ2FzsyD0T1Q5fOhdQ9nhUTHsDqXKIu3y9JddZk2JagxK4ya2ImP++1epXRCz+acvQ/f2HuJTjCDSQ5MQuXeDKTDKJCItAVDr2+Nd+lW672KrdTrGSWUZ+IioXtisliRyC+yFdn00F8gupegVo3s6C7GvfOPLu7XQIMODdtqgC0AaUSqgE4kO3IHZXD2Ze+RzZVFuqrnrv8oO415Py7zESJllaLFvGOS28u+ctHMvqEBP2xhAQ3Huu6r2Q3is5i5SNcH9yiLhdsQLdSbOa+l6YdtftNL seoul-key
+      KeyName: <key name>
+      PublicKeyMaterial: <put ur key in here. ex.ssh-rsa AAAA...>
 
   # RDS 보안그룹
   RdsSG:
