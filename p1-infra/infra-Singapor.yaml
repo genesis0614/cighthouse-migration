@@ -249,7 +249,7 @@ Resources:
       DBInstanceIdentifier: mydb
       Engine: mysql
       MasterUsername: admin
-      MasterUserPassword: admin123
+      MasterUserPassword: your password here
       DBInstanceClass: db.t3.micro
       AllocatedStorage: 20
       PubliclyAccessible: false
