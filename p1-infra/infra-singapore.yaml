@@ -7,6 +7,23 @@ Parameters:
     Type: String
     Description: Project Name
     Default: sungju
+  
+  DBInstanceIdentifier:
+    Type: String
+    Description: RDS DB name
+    Default: mydb
+  
+  DBUsername:
+    Type: String
+    Description: RDS Master Username
+    Default: admin
+    NoEcho: false
+  
+  DBPassword:
+    Type: String
+    Description: RDS Master Password
+    NoEcho: true
+    MinLength: 8
 
 Mappings:
   CidrMap:
@@ -246,10 +263,10 @@ Resources:
   MyDBInstance:
     Type: AWS::RDS::DBInstance
     Properties:
-      DBInstanceIdentifier: mydb
+      DBInstanceIdentifier: !Ref DBInstanceIdentifier
       Engine: mysql
-      MasterUsername: admin
-      MasterUserPassword: your password here
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
       DBInstanceClass: db.t3.micro
       AllocatedStorage: 20
       PubliclyAccessible: false

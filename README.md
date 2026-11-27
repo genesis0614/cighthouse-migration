@@ -2,18 +2,19 @@
 
 ## 📋 프로젝트 개요
 
-**Cighthouse**는 기존 AWS EC2 모놀리식 서비스를 EKS 기반 마이크로서비스로 마이그레이션하는 프로젝트입니다.
+**Cighthouse**는 기존 AWS EC2 모놀리식 서비스를 EKS 기반 마이크로 서비스로 마이그레이션하는 프로젝트입니다.
 두 개의 AWS 리전(Seoul, Singapore)을 활용하여 리전 간 데이터 마이그레이션, Blue-Green 배포, 고가용성 아키텍처를 구현합니다.
 
 ---
 
 ## 🏗️ 아키텍처 개요
 
-### **Seoul 리전 (기존 모놀리식 서비스)**
+### **로드맵**
 ```
+Seoul 리전 (기존 모놀리식 서비스)
 ┌─────────────────────────────────────────────┐
-│          Seoul VPC (10.1.0.0/16)             │
-├─────────────────────────────────────────────┤
+│Seoul VPC (10.1.0.0/16)  (기존 모놀리식 서비스) 
+├─────────────────────────────────────────────┘
 │  Public Subnet 1,2 (10.1.1.0/24, 10.1.2.0/24)
 │  ├─ ALB (Application Load Balancer)
 │  └─ NAT Instance (Bastion Host 겸용)
@@ -27,17 +28,13 @@
 │
 │  RDS MySQL (Managed)
 │  └─ Database for Seoul service
-└─────────────────────────────────────────────┘
+└──────────────────────────────────────────────
          ↓ (VPC Peering)
        DMS ← 데이터 마이그레이션
          ↓
-```
-
-### **Singapore 리전 (마이크로서비스)**
-```
 ┌─────────────────────────────────────────────┐
-│       Singapore VPC (10.2.0.0/16)            │
-├─────────────────────────────────────────────┤
+│Singapore VPC (10.2.0.0/16)(마이크로서비스)    
+├─────────────────────────────────────────────┘
 │  EKS Cluster
 │  ├─ Worker Nodes (t3.medium × 2)
 │  ├─ Pods (Containerized Services)
@@ -46,14 +43,14 @@
 │  RDS MySQL (Managed)
 │  └─ Database for Singapore service
 │      (Seoul에서 DMS로 마이그레이션된 데이터)
-└─────────────────────────────────────────────┘
+└──────────────────────────────────────────────
 ```
 
 ### **Route53 Blue-Green 배포**
 ```
-도메인: saintlee.life
+도메인
 ├─ Weighted Routing Policy
-│  ├─ Seoul ALB (가중치: X%)  → Record 1
+│  ├─ Seoul ALB        (가중치: X%)  → Record 1
 │  └─ Singapore EKS LB (가중치: Y%)  → Record 2
 └─ 트래픽 분산 및 자동 Failover
 ```
@@ -66,16 +63,13 @@
 cighthouse/
 ├── p1-infra/
 │   ├── Infra-Seoul.yaml              # Seoul 리전 인프라 (VPC, EC2, ALB, ASG)
-│   ├── infra-Singapor.yaml           # Singapore 리전 인프라 (VPC, RDS, NAT Gateway)
-│   └── infra-Singapor-eks.sh         # Singapore EKS 클러스터 자동 배포
+│   ├── infra-singapore.yaml           # Singapore 리전 인프라 (VPC, RDS, NAT Gateway)
+│   └── infra-singapore-eks.sh         # Singapore EKS 클러스터 자동 배포
 ├── p2-service/
 │   ├── index.html                    # 메인 페이지
 │   ├── login.html, login.php         # 로그인 페이지
 │   ├── signup.html, signup.php       # 회원가입 페이지
 │   └── logout.php                    # 로그아웃 처리
-├── ignore-presentation/              # 프로젝트 문서 (PDF, PPTX, 이미지)
-├── ignore-keypair/                   # SSH 키페어 (Git 무시)
-├── ignore-infra/                     # 추가 인프라 설정 (Git 무시)
 └── README.md                         # 이 파일
 ```
 
@@ -199,12 +193,21 @@ ssh -i seoul-key.pem ec2-user@$PRIVATE_IP
 
 ### **3단계: Singapore 리전 배포**
 
+#### 3-0. Cloudformation
+```bash
+- infra-singapor.yaml 템플릿을 Cloudformation에 업로드합니다.
+- 파라메터 값으로는 총 3가지를 입력합니다.
+  - RDS DB name
+  - RDS User name
+  - RDS password
+```
+
 #### 3-1. Singapore 인프라 배포 (CloudFormation)
 ```bash
 # Singapore 인프라 배포 (VPC, Subnets, RDS, NAT Gateway)
 aws cloudformation create-stack \
   --stack-name singapore-stack \
-  --template-body file://p1-infra/infra-Singapor.yaml \
+  --template-body file://p1-infra/infra-singapore.yaml \
   --region ap-southeast-1 \
   --parameters \
     ParameterKey=ProjectName,ParameterValue=sungju
@@ -229,7 +232,7 @@ kubectl version --client
 
 # 2. EKS 배포 스크립트 실행
 # 주의: 사전에 eksctl, kubectl 설치 필수
-bash p1-infra/infra-Singapor-eks.sh
+bash p1-infra/infra-singapore-eks.sh
 
 # 스크립트 내부 작동:
 # - CloudFormation Export 값으로 VPC/Subnet ID 조회
@@ -254,75 +257,42 @@ kubectl get pods --all-namespaces
 ---
 
 ### **4단계: VPC 피어링 설정**
+해당 항목은 AWS Console에서 작업합니다.
 
-#### 4-1. VPC 피어링 요청 (AWS CLI)
+#### 4-1. VPC 피어링 요청 (Singapore 리전)
+<img src="./assets/vpc-peering/singapore-make-peering.png" width="700" />
+
 ```bash
-# Seoul VPC ID 조회
-SEOUL_VPC=$(aws ec2 describe-vpcs \
-  --filters "Name=tag:Name,Values=seoul-vpc" \
-  --region ap-northeast-2 \
-  --query 'Vpcs[0].VpcId' \
-  --output text)
-
-# Singapore VPC ID 조회
-SG_VPC=$(aws ec2 describe-vpcs \
-  --filters "Name=tag:Name,Values=sungju-vpc" \
-  --region ap-southeast-1 \
-  --query 'Vpcs[0].VpcId' \
-  --output text)
-
-# Seoul에서 Singapore로 피어링 요청
-PEERING_ID=$(aws ec2 create-vpc-peering-connection \
-  --vpc-id $SEOUL_VPC \
-  --peer-vpc-id $SG_VPC \
-  --peer-region ap-southeast-1 \
-  --region ap-northeast-2 \
-  --query 'VpcPeeringConnection.VpcPeeringConnectionId' \
-  --output text)
-
-echo "Peering Connection ID: $PEERING_ID"
+- Singapore 리전의 VPC를 선택합니다.
+- 리전의 경우 '다른 리전' 선택하며, Seoul (ap-northeast-2)를 선택합니다.
 ```
 
-#### 4-2. 피어링 연결 수락 (Singapore 리전)
+#### 4-2. 피어링 연결 수락 (Seoul 리전)
+<img src="./assets/vpc-peering/seoul-wait-peering.png" width="700" />
+<img src="./assets/vpc-peering/seoul-accept-peering.png" width="400" />
+
 ```bash
-# 피어링 연결 수락
-aws ec2 accept-vpc-peering-connection \
-  --vpc-peering-connection-id $PEERING_ID \
-  --region ap-southeast-1
+- VPC Peering Console로 이동합니다.
+- 대기중인 요청이 있는지 확인합니다.
+- 요청자의 Region, VPC ID, CIDR를 확인한 후 '수락'합니다.  
 ```
 
 #### 4-3. 라우팅 테이블 수정
 
 **Seoul 리전:**
-```bash
-# Seoul Private Route Table에 Singapore VPC 대역 추가
-SEOUL_PRI_RT=$(aws ec2 describe-route-tables \
-  --filters "Name=tag:Name,Values=seoul-pri-rt34" \
-  --region ap-northeast-2 \
-  --query 'RouteTables[0].RouteTableId' \
-  --output text)
 
-aws ec2 create-route \
-  --route-table-id $SEOUL_PRI_RT \
-  --destination-cidr-block 10.2.0.0/16 \
-  --vpc-peering-connection-id $PEERING_ID \
-  --region ap-northeast-2
+<img src="./assets/vpc-peering/rt-seoul.png" width="700" />
+
+```bash
+- Seoul Private Route Table에 Singapore VPC 대역 추가합니다.
 ```
 
 **Singapore 리전:**
-```bash
-# Singapore Private Route Table에 Seoul VPC 대역 추가
-SG_PRI_RT=$(aws ec2 describe-route-tables \
-  --filters "Name=tag:Name,Values=sungju-pri-rt34" \
-  --region ap-southeast-1 \
-  --query 'RouteTables[0].RouteTableId' \
-  --output text)
 
-aws ec2 create-route \
-  --route-table-id $SG_PRI_RT \
-  --destination-cidr-block 10.1.0.0/16 \
-  --vpc-peering-connection-id $PEERING_ID \
-  --region ap-southeast-1
+<img src="./assets/vpc-peering/rt-singapore.png" width="700" />
+
+```bash
+- Singapore Private Route Table에 Seoul VPC 대역 추가합니다.
 ```
 
 #### 4-4. 보안 그룹 수정 (선택사항)
@@ -342,63 +312,50 @@ aws ec2 authorize-security-group-ingress \
 ---
 
 ### **5단계: 데이터베이스 마이그레이션 (DMS)**
+해당 항목은 AWS Console에서 작업합니다.
+
+#### 5-0. DB User 생성
+<img src="./assets/dms/5-sourcedb-user.png" width="500" />
+
+```bash
+- 해당 작업은 Seoul 리전에서 생성된 DB에서 작업합니다.
+- 소스 엔드포인트 테스트를 위한 User를 생성합니다.
+```
 
 #### 5-1. DMS Replication Instance 생성
+<img src="./assets/dms/1-replica-subent-group.png" width="500" />
+<img src="./assets/dms/2-replica-instance.png" width="500" />
+
 ```bash
-# DMS Replication Instance 생성
-aws dms create-replication-instance \
-  --replication-instance-identifier seoul-to-sg-replication \
-  --replication-instance-class dms.t3.small \
-  --allocated-storage 20 \
-  --engine-version 3.4.6 \
-  --region ap-northeast-2
+- DMS Console에서 복제 서브넷 그룹을 생성합니다.
+- 복제 인스턴스를 생성합니다.
 ```
 
-#### 5-2. 소스 DB 엔드포인트 (Seoul RDS)
-```bash
-# Seoul RDS 엔드포인트 조회
-SEOUL_RDS_ENDPOINT=$(aws rds describe-db-instances \
-  --db-instance-identifier mydb \
-  --region ap-northeast-2 \
-  --query 'DBInstances[0].Endpoint.Address' \
-  --output text)
+#### 5-2. 소스 DB 엔드포인트 설정 (Seoul DB)
+<img src="./assets/dms/3-source-endpoint1.png" width="500" />
+<img src="./assets/dms/4-source-endpoint2.png" width="500" />
 
-# DMS 소스 엔드포인트 생성
-aws dms create-endpoint \
-  --endpoint-identifier seoul-rds-source \
-  --endpoint-type source \
-  --engine-name mysql \
-  --server-name $SEOUL_RDS_ENDPOINT \
-  --port 3306 \
-  --username admin \
-  --password admin123 \
-  --database-name mydb \
-  --region ap-northeast-2
+```bash
+- 소스 엔드포인트를 설정합니다.
 ```
 
-#### 5-3. 대상 DB 엔드포인트 (Singapore RDS)
-```bash
-# Singapore RDS 엔드포인트 조회
-SG_RDS_ENDPOINT=$(aws rds describe-db-instances \
-  --db-instance-identifier mydb \
-  --region ap-southeast-1 \
-  --query 'DBInstances[0].Endpoint.Address' \
-  --output text)
+#### 5-3. 소스 DB 엔드포인트 테스트
+<img src="./assets/dms/6-endpoint-test.png" width="700" />
 
-# DMS 대상 엔드포인트 생성
-aws dms create-endpoint \
-  --endpoint-identifier sg-rds-target \
-  --endpoint-type target \
-  --engine-name mysql \
-  --server-name $SG_RDS_ENDPOINT \
-  --port 3306 \
-  --username admin \
-  --password admin123 \
-  --database-name mydb \
-  --region ap-northeast-2
+```bash
+- 소스 엔드포인트가 정상적으로 연결되었는지 확인합니다.
 ```
 
-#### 5-4. 마이그레이션 작업 (Task) 생성
+#### 5-4. 대상 DB 엔드포인트 설정 (Singapore RDS)
+<img src="./assets/dms/7-target-endpoint1.png" width="500" />
+<img src="./assets/dms/8-target-endpoint2.png" width="500" />
+
+```bash
+- 대상 엔드포인트를 설정합니다.
+- RDS의 사용자와 비밀번호의 경우, 생성시에 만들어진 내용을 참조합니다.
+```
+
+#### 5-5. 마이그레이션 작업 (Task) 생성
 ```bash
 # DMS 마이그레이션 작업 생성
 aws dms create-replication-task \
@@ -417,7 +374,7 @@ aws dms start-replication-task \
   --region ap-northeast-2
 ```
 
-#### 5-5. 마이그레이션 진행 상황 확인
+#### 5-6. 마이그레이션 진행 상황 확인
 ```bash
 # 마이그레이션 작업 상태 확인
 aws dms describe-replication-tasks \
@@ -657,33 +614,3 @@ aws route53 list-resource-record-sets \
 ```
 
 ---
-
-## 📚 참고 자료
-
-- [AWS CloudFormation 문서](https://docs.aws.amazon.com/cloudformation/)
-- [AWS EKS 가이드](https://docs.aws.amazon.com/eks/)
-- [AWS DMS 설명서](https://docs.aws.amazon.com/dms/)
-- [AWS Route53 가이드](https://docs.aws.amazon.com/route53/)
-- [eksctl 공식 문서](https://eksctl.io/)
-
----
-
-## 📝 라이선스
-
-MIT License
-
----
-
-## 👤 프로젝트 정보
-
-**목표**: AWS 다중 리전 아키텍처 및 마이크로서비스 마이그레이션 학습  
-**클라우드**: AWS (Seoul, Singapore)  
-**기술 스택**: 
-- 인프라: CloudFormation, EKS, RDS, ALB, Route53
-- 서비스: PHP, Apache, MySQL
-- 자동화: AWS CLI, eksctl, Bash
-
----
-
-**작성 시작일**: 2024년  
-**최종 업데이트**: 2026년 11월 22일
