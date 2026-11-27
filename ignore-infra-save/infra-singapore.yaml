@@ -1,0 +1,290 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Default VPC stack for the 3-Tier Web Service
+
+# 파라메터 및 설정값
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project Name
+    Default: sungju
+
+Mappings:
+  CidrMap:
+    ap-southeast-1:
+      VpcCidr: 10.2.0.0/16
+      PubSub1Cidr: 10.2.1.0/24
+      PubSub2Cidr: 10.2.2.0/24
+      PriSub3Cidr: 10.2.3.0/24
+      PriSub4Cidr: 10.2.4.0/24
+      RdsSub5Cidr: 10.2.5.0/24
+      RdsSub6Cidr: 10.2.6.0/24
+
+Resources:
+  # VPC & IGW
+  MyVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !FindInMap [CidrMap, !Ref "AWS::Region", VpcCidr]
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-vpc"
+
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-igw"
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref MyVpc
+      InternetGatewayId: !Ref Igw
+
+  # 퍼블릭 서브넷1
+  PubSub1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVpc
+      CidrBlock: !FindInMap [CidrMap, !Ref "AWS::Region", PubSub1Cidr]
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-pubsub1"
+
+  # 퍼블릭 서브넷2
+  PubSub2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVpc
+      CidrBlock: !FindInMap [CidrMap, !Ref "AWS::Region", PubSub2Cidr]
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [2, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-pubsub2"
+
+  # 프라이빗 서브넷3
+  PriSub3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVpc
+      CidrBlock: !FindInMap [CidrMap, !Ref "AWS::Region", PriSub3Cidr]
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-prisub3"
+  
+  # 퍼블릭 서브넷4
+  PriSub4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVpc
+      CidrBlock: !FindInMap [CidrMap, !Ref "AWS::Region", PriSub4Cidr]
+      AvailabilityZone: !Select [2, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-prisub4"
+
+  # RDS 서브넷5
+  RdsSub5:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref MyVpc
+      CidrBlock: !FindInMap [CidrMap, !Ref "AWS::Region", RdsSub5Cidr]
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ProjectName}-rdssub5"
+
+  # RDS 서브넷6
+  RdsSub6:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref MyVpc
+      CidrBlock: !FindInMap [CidrMap, !Ref "AWS::Region", RdsSub6Cidr]
+      AvailabilityZone: !Select [2, !GetAZs '']
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ProjectName}-rdssub6"
+
+# NAT Gateway
+  # EIP
+  NatGatewayEip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-nat-eip"
+
+  # NAT Gateway
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn: NatGatewayEip
+    Properties:
+      AllocationId: !GetAtt NatGatewayEip.AllocationId
+      SubnetId: !Ref PubSub1
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-nat-gw"
+
+  # 퍼블릭 RT
+  PubRt12:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-pub-rt12"
+
+  # 퍼블릭 RT + 서브넷1
+  PubRt12Sub1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PubRt12
+      SubnetId: !Ref PubSub1
+
+  # 퍼블릭 RT + 서브넷2
+  PubRt12Sub2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PubRt12
+      SubnetId: !Ref PubSub2
+
+  # 퍼블릭 RT + IGW
+  PubRt12DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PubRt12
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Igw
+
+  # 프라이빗 RT 
+  PriRt34:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-pri-rt34"
+
+  # 프라이빗 RT + 서브넷3
+  PriRt34Sub3Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PriRt34
+      SubnetId: !Ref PriSub3
+  
+  # 프라이빗 RT + 서브넷4
+  PriRt34Sub4Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PriRt34
+      SubnetId: !Ref PriSub4
+
+  # 프라이빗 RT, NAT 연결
+  PriRt34DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: NatGateway
+    Properties:
+      RouteTableId: !Ref PriRt34
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  # RDS 라우팅 테이블
+  RdsRt56:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-rds-rt56"
+
+  # RDS RT + 서브넷5
+  RdsRt56Sub5Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RdsRt56
+      SubnetId: !Ref RdsSub5
+  
+
+  # RDS RT + 서브넷6
+  RdsRt56Sub6Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RdsRt56
+      SubnetId: !Ref RdsSub6
+
+  # Keypair
+  KeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: singapore-key
+      PublicKeyMaterial: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCXIoMb/gnFQmBBPfR+YnZ7RgNEpUbpSYFW0i0pE4yV+1k4ArXO4l9brzOLwJ2FzsyD0T1Q5fOhdQ9nhUTHsDqXKIu3y9JddZk2JagxK4ya2ImP++1epXRCz+acvQ/f2HuJTjCDSQ5MQuXeDKTDKJCItAVDr2+Nd+lW672KrdTrGSWUZ+IioXtisliRyC+yFdn00F8gupegVo3s6C7GvfOPLu7XQIMODdtqgC0AaUSqgE4kO3IHZXD2Ze+RzZVFuqrnrv8oO415Py7zESJllaLFvGOS28u+ctHMvqEBP2xhAQ3Huu6r2Q3is5i5SNcH9yiLhdsQLdSbOa+l6YdtftNL seoul-key
+
+  # RDS 보안그룹
+  RdsSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "RDS Security Group"
+      VpcId: !Ref MyVpc
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ProjectName}-sg-rds"
+
+  #RDS
+  MyDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: mydb
+      Engine: mysql
+      MasterUsername: admin
+      MasterUserPassword: admin123
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: 20
+      PubliclyAccessible: false
+      VPCSecurityGroups:
+        - !Ref RdsSG
+      DBSubnetGroupName: !Ref MyDBSubnetGroup
+      BackupRetentionPeriod: 0
+
+  MyDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "RDS subnet group"
+      SubnetIds:
+        - !Ref RdsSub5
+        - !Ref RdsSub6
+
+# AWS cloudformation 출력값
+Outputs:
+  MyVpc:
+    Value: !Ref MyVpc
+    Export:
+      Name: MyVpc
+  PubSub1Id:
+    Value: !Ref PubSub1
+    Export:
+      Name: PubSub1Id
+  PubSub2Id:
+    Value: !Ref PubSub2
+    Export:
+      Name: PubSub2Id
+  PriSub3Id:
+    Value: !Ref PriSub3
+    Export:
+      Name: PriSub3Id
+  PriSub4Id:
+    Value: !Ref PriSub4
+    Export:
+      Name: PriSub4Id
